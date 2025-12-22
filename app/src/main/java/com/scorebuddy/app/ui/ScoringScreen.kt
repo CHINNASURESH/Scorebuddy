@@ -122,7 +122,12 @@ fun ScoringScreen(onMatchFinished: () -> Unit) {
                         }
                     }
 
-                    Divider(modifier = Modifier.width(1.dp).fillMaxHeight())
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant)
+                    )
 
                     // Team 2
                     Column(
