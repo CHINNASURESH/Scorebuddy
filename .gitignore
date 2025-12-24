@@ -1,4 +1,4 @@
 local.properties
 .gradle/
-build/
+**/build/
 android-sdk/
