@@ -1,76 +1,51 @@
 #!/bin/bash
-set -e # Exit immediately if a command exits with a non-zero status.
+set -e
 
-# --- Configuration ---
-# You can change these versions based on your project's compileSdkVersion and buildToolsVersion
-ANDROID_COMPILE_SDK="34"          # Matches compileSdk in build.gradle
-ANDROID_BUILD_TOOLS="34.0.0"      # Matches buildToolsVersion in build.gradle
-CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+echo "Resetting working tree to HEAD..."
+git reset --hard HEAD
 
-# Define Paths
-export ANDROID_HOME="$HOME/Android/sdk"
-export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+echo "Cleaning build artifacts..."
+rm -rf .gradle build local.properties
 
-echo "🛠️  Starting Android Environment Setup for Jules..."
+# Set up Android SDK
+export ANDROID_HOME=$PWD/android-sdk
+export CMDLINE_TOOLS_ROOT=$ANDROID_HOME/cmdline-tools
+export PATH=$CMDLINE_TOOLS_ROOT/latest/bin:$PATH
+export PATH=$ANDROID_HOME/platform-tools:$PATH
 
-# 1. Install Java (if not already present or if specific version needed)
-# Jules VMs usually have Java, but ensuring the correct version for Gradle is good practice.
-# Uncomment the line below if you need a specific JDK version (e.g., openjdk-17-jdk)
-# sudo apt-get update && sudo apt-get install -y openjdk-17-jdk
+if [ ! -d "$ANDROID_HOME" ]; then
+    echo "Installing Android SDK..."
+    mkdir -p $CMDLINE_TOOLS_ROOT
 
-# 2. Setup Android SDK Directory
-if [ ! -d "$ANDROID_HOME/cmdline-tools" ]; then
-    echo "📦 Downloading Android Command Line Tools..."
-    mkdir -p "$ANDROID_HOME/cmdline-tools"
-    
-    # Download and unzip tools
-    wget -q "$CMDLINE_TOOLS_URL" -O /tmp/cmdline-tools.zip
-    unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-temp
-    
-    # Move to the correct structure: $ANDROID_HOME/cmdline-tools/latest/bin
-    mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
-    mv /tmp/cmdline-tools-temp/cmdline-tools/* "$ANDROID_HOME/cmdline-tools/latest/"
-    
-    # Cleanup
-    rm /tmp/cmdline-tools.zip
-    rm -rf /tmp/cmdline-tools-temp
-    echo "✅ Command Line Tools installed."
+    # Download
+    ZIP_FILE=commandlinetools-linux-13114758_latest.zip
+    URL=https://dl.google.com/android/repository/$ZIP_FILE
+
+    echo "Downloading $URL..."
+    curl -o $ZIP_FILE $URL
+
+    echo "Unzipping..."
+    unzip -q $ZIP_FILE -d $CMDLINE_TOOLS_ROOT
+    rm $ZIP_FILE
+
+    # Move to 'latest' as required by sdkmanager
+    mv $CMDLINE_TOOLS_ROOT/cmdline-tools $CMDLINE_TOOLS_ROOT/latest
+
+    echo "Accepting licenses..."
+    yes | sdkmanager --licenses
+
+    echo "Installing platform tools and SDK..."
+    # Build Tools 33.0.1 was installed by Gradle automatically or defaults?
+    # I'll install a specific version to be safe.
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 else
-    echo "ℹ️  Android SDK already detected. Skipping download."
+    echo "Android SDK already found at $ANDROID_HOME"
 fi
 
-# 3. Accept Licenses and Install SDK Components
-echo "📜 Accepting Licenses and Installing SDK Components..."
-yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1
+# Create local.properties
+echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-echo "📦 Installing Platforms and Build Tools..."
-"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-    "platform-tools" \
-    "platforms;android-$ANDROID_COMPILE_SDK" \
-    "build-tools;$ANDROID_BUILD_TOOLS" > /dev/null
+echo "Generating Gradle Wrapper..."
+gradle wrapper
 
-# 4. Create local.properties
-# Gradle requires this file to know where the SDK is located
-if [ ! -f "local.properties" ]; then
-    echo "📝 Creating local.properties..."
-    echo "sdk.dir=$ANDROID_HOME" > local.properties
-else
-    echo "ℹ️  local.properties exists, ensuring sdk.dir is correct..."
-    # Using sed to replace or append sdk.dir without overwriting other properties
-    if grep -q "sdk.dir" local.properties; then
-        sed -i "s|^sdk.dir=.*|sdk.dir=$ANDROID_HOME|" local.properties
-    else
-        echo "sdk.dir=$ANDROID_HOME" >> local.properties
-    fi
-fi
-
-# 5. Set Environment Variables for the current session
-# Note: In some CI/Agent environments, you may need to source this script or
-# add these exports to your shell profile (.bashrc) if the session persists.
-echo "export ANDROID_HOME=$ANDROID_HOME" >> $HOME/.bashrc
-echo "export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $HOME/.bashrc
-
-# 6. Verify Installation
-echo "🔍 Verifying installation..."
-$ANDROID_HOME/platform-tools/adb --version
-echo "✅ Android Environment Setup Complete!"
+echo "Setup complete. You can now run ./gradlew assembleDebug"
